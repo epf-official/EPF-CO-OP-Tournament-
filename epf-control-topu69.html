@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>EPF Admin</title>
+<style>
+:root{--bg:#070b14;--card:#101828;--card2:#162036;--line:#24324f;--text:#e8edf7;--mute:#8d9bb8;--gold:#f5b83d;--green:#2fd48a;--red:#ff5d6c;--blue:#4a8cff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.5}
+.wrap{max-width:1000px;margin:auto;padding:16px 12px 60px}
+h1{font-size:20px;margin:0;color:var(--gold)}h2{font-size:18px;color:var(--gold);margin:22px 0 10px}
+input,select,textarea{width:100%;padding:10px 12px;background:var(--card2);color:var(--text);border:1px solid var(--line);border-radius:10px;font-size:14px;font-family:inherit}
+textarea{min-height:90px}
+label{display:block;font-size:12px;color:var(--mute);margin:8px 0 3px}
+button{cursor:pointer;border:0;border-radius:10px;padding:9px 14px;font-weight:700;font-size:14px;background:var(--card2);color:var(--text);border:1px solid var(--line)}
+button.p{background:var(--gold);color:#1a1300;border-color:var(--gold)}
+button.g{background:#0e2a20;color:var(--green);border-color:var(--green)}
+button.r{background:#2d1117;color:var(--red);border-color:var(--red)}
+button:disabled{opacity:.5}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0 12px;border-bottom:1px solid var(--line)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0}
+.tabs button.on{background:var(--gold);color:#1a1300;border-color:var(--gold)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+.card h3{margin:0 0 6px;font-size:17px}
+.pl{border-top:1px dashed var(--line);padding:8px 0;font-size:13px;word-break:break-word}
+.m{color:var(--mute)}
+.bd{font-size:11px;font-weight:800;padding:2px 9px;border-radius:99px;margin-left:6px}
+.s-pending{background:#3a2d08;color:var(--gold)}.s-approved{background:#0e2a20;color:var(--green)}.s-declined{background:#2d1117;color:var(--red)}
+.acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.fb{display:inline-flex;vertical-align:middle;margin:0 4px;color:#1877f2}.fb svg{width:20px;height:20px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:600px){.row{grid-template-columns:1fr}}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);padding:12px 18px;border-radius:12px;z-index:99;font-weight:700;max-width:92vw}
+.toast.ok{background:#0e2a20;border:1px solid var(--green)}.toast.err{background:#2d1117;border:1px solid var(--red)}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:flex-start;justify-content:center;padding:14px;z-index:50;overflow:auto}
+.modal.on{display:flex}
+.box{background:var(--card);border:1px solid var(--gold);border-radius:16px;padding:18px;max-width:640px;width:100%}
+.login{max-width:380px;margin:12vh auto;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px}
+.hide{display:none}
+.scrow{display:grid;grid-template-columns:1fr 64px 64px auto;gap:8px;align-items:center;padding:8px 0;border-top:1px dashed var(--line);font-size:14px}
+@media(max-width:600px){.scrow{grid-template-columns:1fr 1fr}.scrow .nm{grid-column:1/-1}}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.chips button.on{border-color:var(--gold);color:var(--gold)}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginv" class="login">
+  <h1>EPF Admin Login</h1>
+  <form id="lf"><label>Email</label><input id="em" type="email" autocomplete="username" required>
+  <label>Password</label><input id="pw" type="password" autocomplete="current-password" required>
+  <div id="lerr" class="m" style="margin:10px 0;color:var(--red)"></div>
+  <button class="p" style="width:100%" type="submit">Login</button></form>
+</div>
+
+<!-- PANEL -->
+<div id="panel" class="wrap hide">
+  <div class="top"><h1>EPF Admin Panel</h1><button id="out" class="r">Logout</button></div>
+  <div class="tabs" id="tabs">
+    <button data-t="teams" class="on">Teams</button>
+    <button data-t="scores">Scores</button>
+    <button data-t="fix">Fixture &amp; Deadlines</button>
+    <button data-t="rules">Rules</button>
+  </div>
+  <section id="t-teams"></section>
+  <section id="t-scores" class="hide"></section>
+  <section id="t-fix" class="hide"></section>
+  <section id="t-rules" class="hide"></section>
+</div>
+
+<div class="modal" id="modal"><div class="box" id="mbox"></div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+const db = supabase.createClient("https://lwdkcljeswzhvldkvpxh.supabase.co", "sb_publishable_UKUTLDe_CKnaFL8IlwlrYA_1s43LL53");
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const url = u => /^https?:\/\//i.test(u || "") ? esc(u) : "#";
+const FB = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M24 12a12 12 0 1 0-13.9 11.9v-8.4H7.1V12h3V9.4c0-3 1.8-4.7 4.5-4.7 1.3 0 2.7.2 2.7.2v3h-1.5c-1.5 0-2 .9-2 1.9V12h3.4l-.5 3.5h-2.9v8.4A12 12 0 0 0 24 12z"/></svg>';
+const fbi = (u, t) => u ? `<a class="fb" href="${url(u)}" target="_blank" rel="noopener noreferrer" title="${t}">${FB}</a>` : "";
+const norm = s => String(s || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+const BD = d => new Date(d).toLocaleString("en-GB", {timeZone:"Asia/Dhaka", day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit", hour12:true}) + " BDT";
+const toInput = d => d ? new Date(d).toLocaleString("sv-SE", {timeZone:"Asia/Dhaka"}).replace(" ", "T").slice(0, 16) : "";
+
+function toast(t, ok = true){
+  const e = document.createElement("div"); e.className = "toast " + (ok ? "ok" : "err"); e.textContent = t;
+  document.body.appendChild(e); setTimeout(() => e.remove(), 3500);
+}
+const modal = $("#modal");
+const openM = h => { $("#mbox").innerHTML = h; modal.classList.add("on"); };
+const closeM = () => modal.classList.remove("on");
+modal.addEventListener("click", e => { if (e.target === modal) closeM(); });
+const errText = e => e ? (e.code === "23505" ? "Duplicate UID or team name!" : (e.message || "Error")) : "";
+
+// ---------- AUTH ----------
+async function checkAdmin(){
+  const { data: { session } } = await db.auth.getSession();
+  if (!session) return show(false);
+  const { data } = await db.from("admins").select("user_id").eq("user_id", session.user.id).maybeSingle();
+  if (!data) { await db.auth.signOut(); $("#lerr").textContent = "This account is not an admin."; return show(false); }
+  show(true); loadAll();
+}
+function show(ok){ $("#loginv").classList.toggle("hide", ok); $("#panel").classList.toggle("hide", !ok); }
+$("#lf").addEventListener("submit", async e => {
+  e.preventDefault(); $("#lerr").textContent = "";
+  const { error } = await db.auth.signInWithPassword({ email: $("#em").value.trim(), password: $("#pw").value });
+  if (error) { $("#lerr").textContent = "Wrong email or password."; return; }
+  $("#pw").value = ""; checkAdmin();
+});
+$("#out").onclick = async () => { await db.auth.signOut(); show(false); };
+
+// ---------- TABS ----------
+$("#tabs").addEventListener("click", e => {
+  const b = e.target.closest("button[data-t]"); if (!b) return;
+  document.querySelectorAll("#tabs button").forEach(x => x.classList.toggle("on", x === b));
+  ["teams","scores","fix","rules"].forEach(t => $("#t-" + t).classList.toggle("hide", t !== b.dataset.t));
+});
+
+let teams = [], filter = "pending", search = "";
+async function loadAll(){ await Promise.all([loadTeams(), loadScores(), loadFix(), loadRules()]); }
+
+// ---------- TEAMS ----------
+async function loadTeams(){
+  const { data, error } = await db.from("teams").select("*, players(*)").order("created_at");
+  if (error) return toast(errText(error), false);
+  teams = data || []; renderTeams();
+}
+function renderTeams(){
+  const cnt = s => teams.filter(t => t.status === s).length;
+  const q = search.toLowerCase();
+  const list = teams.filter(t => (filter === "all" || t.status === filter) &&
+    (!q || (t.team_name + " " + t.players.map(p => p.name + " " + p.game_uid).join(" ")).toLowerCase().includes(q)));
+  $("#t-teams").innerHTML = `
+    <div class="chips">${["pending","approved","declined","all"].map(f => `<button data-f="${f}" class="${filter === f ? "on" : ""}">${f[0].toUpperCase() + f.slice(1)}${f !== "all" ? " (" + cnt(f) + ")" : " (" + teams.length + ")"}</button>`).join("")}</div>
+    <input id="tq" placeholder="Search team / player / UID" value="${esc(search)}" style="margin-bottom:12px">
+    ${list.length ? list.map(t => {
+      const c = t.players.find(p => p.role === "captain") || {}, o = t.players.find(p => p.role === "partner") || {};
+      const pl = (p, lab) => `<div class="pl"><b>${esc(p.name)}</b> <span class="m">(${lab})</span> ${fbi(p.fb_link, "Player Facebook")}
+        <div class="m">✉ ${esc(p.email)} · 📱 ${esc(p.whatsapp)}<br>UID: <b>${esc(p.game_uid)}</b> · Device: ${esc(p.device)}</div></div>`;
+      return `<div class="card"><h3>${esc(t.team_name)}<span class="bd s-${t.status}">${t.status.toUpperCase()}</span> ${fbi(t.fb_post_link, "Registration post")}</h3>
+        <div class="m">Registered: ${esc(BD(t.created_at))}</div>${pl(c, "Captain")}${pl(o, "Partner")}
+        <div class="acts">
+          ${t.status !== "approved" ? `<button class="g" data-a="approved" data-id="${t.id}">✔ Approve</button>` : ""}
+          ${t.status !== "declined" ? `<button class="r" data-a="declined" data-id="${t.id}">✖ Decline</button>` : ""}
+          ${t.status !== "pending" ? `<button data-a="pending" data-id="${t.id}">↩ Pending</button>` : ""}
+          <button data-edit="${t.id}">✎ Edit</button>
+          <button class="r" data-del="${t.id}">🗑 Delete</button></div></div>`;
+    }).join("") : '<div class="m">Nothing here.</div>'}`;
+}
+$("#t-teams").addEventListener("input", e => { if (e.target.id === "tq") { search = e.target.value; const p = e.target.selectionStart; renderTeams(); const n = $("#tq"); n.focus(); n.setSelectionRange(p, p); } });
+$("#t-teams").addEventListener("click", async e => {
+  const f = e.target.closest("[data-f]"); if (f) { filter = f.dataset.f; return renderTeams(); }
+  const a = e.target.closest("[data-a]");
+  if (a) { const { error } = await db.from("teams").update({ status: a.dataset.a }).eq("id", a.dataset.id); if (error) return toast(errText(error), false); toast("Updated"); return loadTeams(); }
+  const d = e.target.closest("[data-del]");
+  if (d) { if (!confirm("Delete this team permanently?")) return; const { error } = await db.from("teams").delete().eq("id", d.dataset.del); if (error) return toast(errText(error), false); toast("Deleted"); return loadTeams(); }
+  const ed = e.target.closest("[data-edit]"); if (ed) editTeam(ed.dataset.edit);
+});
+function editTeam(id){
+  const t = teams.find(x => x.id === id), c = t.players.find(p => p.role === "captain"), o = t.players.find(p => p.role === "partner");
+  const pf = (p, k, lab) => `<div class="row">${[["name","Name"],["email","Email"],["game_uid","Game UID"],["device","Device"],["whatsapp","WhatsApp"],["fb_link","Facebook link"]].map(([f, l]) => `<div><label>${l}</label><input data-p="${k}" data-f="${f}" value="${esc(p[f])}"></div>`).join("")}</div>`;
+  openM(`<h2 style="margin-top:0">Edit Team</h2>
+    <label>Team name</label><input id="e-name" value="${esc(t.team_name)}">
+    <label>FB registration post link</label><input id="e-post" value="${esc(t.fb_post_link)}">
+    <h2>Captain</h2>${pf(c, "c")}<h2>Partner</h2>${pf(o, "o")}
+    <div class="acts"><button class="p" id="e-save">Save</button><button id="e-x">Cancel</button></div>`);
+  $("#e-x").onclick = closeM;
+  $("#e-save").onclick = async () => {
+    const get = k => { const r = {}; document.querySelectorAll(`[data-p="${k}"]`).forEach(i => r[i.dataset.f] = i.value.trim()); r.uid_norm = norm(r.game_uid); return r; };
+    const r1 = await db.from("teams").update({ team_name: $("#e-name").value.trim(), fb_post_link: $("#e-post").value.trim() }).eq("id", id);
+    if (r1.error) return toast(errText(r1.error), false);
+    const r2 = await db.from("players").update(get("c")).eq("id", c.id); if (r2.error) return toast(errText(r2.error), false);
+    const r3 = await db.from("players").update(get("o")).eq("id", o.id); if (r3.error) return toast(errText(r3.error), false);
+    closeM(); toast("Saved"); loadTeams();
+  };
+}
+
+// ---------- SCORES ----------
+async function loadScores(){
+  const [s, m] = await Promise.all([
+    db.from("score_submissions").select("*").eq("status", "pending").order("created_at"),
+    db.from("public_matches").select("*")
+  ]);
+  const mm = Object.fromEntries((m.data || []).map(x => [x.id, x]));
+  const rr = (await db.from("rounds").select("*")).data || [];
+  const rn = Object.fromEntries(rr.map(r => [r.round_no, r.name]));
+  const L = s.data || [];
+  $("#t-scores").innerHTML = `<h2 style="margin-top:0">Pending scores (${L.length})</h2>` + (L.length ? L.map(x => {
+    const k = mm[x.match_id] || {};
+    return `<div class="card"><b>${esc(rn[k.round_no] || "")} · Match ${esc(k.match_no)}</b>
+      <div style="font-size:17px;margin:6px 0">${esc(k.team1_name)} <b style="color:var(--gold)">${x.score1}</b> — <b style="color:var(--gold)">${x.score2}</b> ${esc(k.team2_name)}</div>
+      <div class="m">Submitted: ${esc(BD(x.created_at))}</div>
+      <div class="acts"><button class="g" data-ap="${x.id}">✔ Approve</button><button class="r" data-rj="${x.id}">✖ Reject</button></div></div>`;
+  }).join("") : '<div class="m">No pending scores.</div>');
+}
+$("#t-scores").addEventListener("click", async e => {
+  const a = e.target.closest("[data-ap]"), r = e.target.closest("[data-rj]");
+  if (!a && !r) return;
+  const { error } = a ? await db.rpc("approve_score", { p_sub: a.dataset.ap }) : await db.rpc("reject_score", { p_sub: r.dataset.rj });
+  if (error) return toast(errText(error), false);
+  toast(a ? "Approved. Winner advanced." : "Rejected"); loadScores(); loadFix();
+});
+
+// ---------- FIXTURE ----------
+async function loadFix(){
+  const [rd, mt, ap] = await Promise.all([
+    db.from("rounds").select("*").order("round_no"), db.from("public_matches").select("*"),
+    db.from("teams").select("id", { count: "exact", head: true }).eq("status", "approved")
+  ]);
+  const R = rd.data || [], M = mt.data || [], n = ap.count || 0;
+  $("#t-fix").innerHTML = `<h2 style="margin-top:0">Generate Fixture</h2>
+    <div class="card"><div class="m">Approved teams: <b style="color:var(--gold)">${n}</b></div>
+    <label>Bracket size</label><select id="gsize">${[2,4,8,16,32,64].map(v => `<option ${v === 32 ? "selected" : ""}>${v}</option>`).join("")}</select>
+    <div class="m" style="margin-top:8px">Picks random approved teams. ⚠ This deletes the old bracket, results and score submissions.</div>
+    <div class="acts"><button class="p" id="gen">Generate Bracket</button></div></div>
+    <h2>Round Deadlines (Bangladesh time)</h2>
+    ${R.length ? R.map(r => `<div class="card"><b>${esc(r.name)}</b> <span class="m">${r.deadline ? "· " + esc(BD(r.deadline)) : ""}</span>
+      <div class="acts"><input type="datetime-local" id="dl-${r.round_no}" value="${toInput(r.deadline)}" style="max-width:240px"><button class="p" data-dl="${r.round_no}">Save</button><button data-cl="${r.round_no}">Clear</button></div></div>`).join("") : '<div class="m">No bracket yet.</div>'}
+    <h2>Match Results (edit / enter)</h2>
+    ${R.map(r => `<div class="card"><b>${esc(r.name)}</b>` + M.filter(m => m.round_no === r.round_no).map(m => m.team1_id && m.team2_id ? `
+      <div class="scrow"><div class="nm">${esc(m.team1_name)} vs ${esc(m.team2_name)} <span class="m">${m.status === "done" ? "✔ done" : ""}</span></div>
+      <input type="number" min="0" max="99" id="a-${m.id}" value="${m.score1 ?? ""}"><input type="number" min="0" max="99" id="b-${m.id}" value="${m.score2 ?? ""}">
+      <button class="g" data-sr="${m.id}">Set</button></div>` : `<div class="scrow"><div class="nm m">Match ${m.match_no}: waiting for teams</div></div>`).join("") + "</div>").join("")}`;
+}
+$("#t-fix").addEventListener("click", async e => {
+  if (e.target.id === "gen") {
+    const size = parseInt($("#gsize").value, 10);
+    if (!confirm(`Generate a ${size}-team bracket? This resets everything in the bracket.`)) return;
+    const { error } = await db.rpc("generate_bracket", { p_size: size });
+    if (error) return toast(error.message.includes("NOT_ENOUGH") ? "Not enough approved teams." : errText(error), false);
+    toast("Bracket generated"); return loadFix();
+  }
+  const d = e.target.closest("[data-dl]"), c = e.target.closest("[data-cl]"), s = e.target.closest("[data-sr]");
+  if (d) { const v = $("#dl-" + d.dataset.dl).value; const { error } = await db.from("rounds").update({ deadline: v ? v + ":00+06:00" : null }).eq("round_no", d.dataset.dl); if (error) return toast(errText(error), false); toast("Deadline saved"); loadFix(); }
+  if (c) { const { error } = await db.from("rounds").update({ deadline: null }).eq("round_no", c.dataset.cl); if (error) return toast(errText(error), false); loadFix(); }
+  if (s) {
+    const id = s.dataset.sr, a = parseInt($("#a-" + id).value, 10), b = parseInt($("#b-" + id).value, 10);
+    if (isNaN(a) || isNaN(b)) return toast("Enter both scores", false);
+    const { error } = await db.rpc("set_result", { p_match: id, s1: a, s2: b });
+    if (error) { const E = { DRAW_NOT_ALLOWED: "Draw not allowed", NEXT_MATCH_ALREADY_PLAYED: "Next match already played, can't change" }; return toast(E[Object.keys(E).find(k => error.message.includes(k))] || errText(error), false); }
+    toast("Result saved"); loadFix(); loadScores();
+  }
+});
+
+// ---------- RULES ----------
+let rules = [];
+async function loadRules(){
+  const { data } = await db.from("rules").select("*").order("sort_order").order("created_at");
+  rules = data || [];
+  $("#t-rules").innerHTML = `<div class="acts" style="margin:0 0 12px"><button class="p" id="radd">+ Add Rule</button></div>` +
+    (rules.length ? rules.map((r, i) => `<div class="card"><h3>${i + 1}. ${esc(r.title)}</h3><div class="m" style="white-space:pre-wrap">${esc(r.body)}</div>
+      <div class="acts"><button data-re="${r.id}">✎ Edit</button><button class="r" data-rd="${r.id}">🗑 Delete</button></div></div>`).join("") : '<div class="m">No rules yet.</div>');
+}
+function ruleForm(r){
+  openM(`<h2 style="margin-top:0">${r ? "Edit" : "Add"} Rule</h2><label>Headline</label><input id="r-t" value="${esc(r ? r.title : "")}">
+    <label>Details</label><textarea id="r-b">${esc(r ? r.body : "")}</textarea><label>Order (small number shows first)</label>
+    <input id="r-o" type="number" value="${r ? r.sort_order : (rules.length ? Math.max(...rules.map(x => x.sort_order)) + 1 : 1)}">
+    <div class="acts"><button class="p" id="r-s">Save</button><button id="r-x">Cancel</button></div>`);
+  $("#r-x").onclick = closeM;
+  $("#r-s").onclick = async () => {
+    const row = { title: $("#r-t").value.trim(), body: $("#r-b").value.trim(), sort_order: parseInt($("#r-o").value, 10) || 0 };
+    if (!row.title || !row.body) return toast("Fill headline and details", false);
+    const { error } = r ? await db.from("rules").update(row).eq("id", r.id) : await db.from("rules").insert(row);
+    if (error) return toast(errText(error), false);
+    closeM(); toast("Saved"); loadRules();
+  };
+}
+$("#t-rules").addEventListener("click", async e => {
+  if (e.target.id === "radd") return ruleForm(null);
+  const ed = e.target.closest("[data-re]"), d = e.target.closest("[data-rd]");
+  if (ed) ruleForm(rules.find(x => x.id === ed.dataset.re));
+  if (d) { if (!confirm("Delete this rule?")) return; const { error } = await db.from("rules").delete().eq("id", d.dataset.rd); if (error) return toast(errText(error), false); loadRules(); }
+});
+
+checkAdmin();
+</script>
+</body>
+</html>
