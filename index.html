@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Elite Playmakers FC | Co-op 2v2 Tournament</title>
+<style>
+:root{--bg:#070b14;--card:#101828;--card2:#162036;--line:#24324f;--text:#e8edf7;--mute:#8d9bb8;--gold:#f5b83d;--green:#2fd48a;--red:#ff5d6c;--blue:#4a8cff}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(1200px 600px at 50% -200px,#16264a,#070b14);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Bengali",sans-serif;line-height:1.5}
+.wrap{max-width:980px;margin:auto;padding:20px 14px 60px}
+header{text-align:center;padding:24px 0 8px}
+.logo{width:150px;max-width:55vw;height:auto;object-fit:contain;mix-blend-mode:lighten;filter:drop-shadow(0 0 18px rgba(245,184,61,.35))}
+h1{margin:10px 0 0;font-size:clamp(24px,6vw,40px);letter-spacing:2px;text-transform:uppercase}
+.presents{color:var(--mute);letter-spacing:6px;font-size:12px;margin-top:6px}
+.title{display:inline-block;margin-top:10px;padding:10px 22px;border:2px solid var(--gold);border-radius:14px;color:var(--gold);font-weight:800;font-size:clamp(18px,4.5vw,28px)}
+.title small{display:block;color:var(--text);font-size:12px;font-weight:500;letter-spacing:2px}
+.search{margin:22px 0 14px}
+input,select{width:100%;padding:12px 14px;background:var(--card2);color:var(--text);border:1px solid var(--line);border-radius:10px;font-size:15px}
+input:focus{outline:2px solid var(--blue);border-color:transparent}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.tab{flex:1;min-width:110px;padding:12px;border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:12px;font-weight:700;cursor:pointer;font-size:15px}
+.tab.on{background:var(--gold);color:#1a1300;border-color:var(--gold)}
+.tab .n{opacity:.8;font-weight:600}
+.panel{display:none}.panel.on{display:block}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+.card h3{margin:0 0 8px;font-size:17px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.badge{font-size:11px;padding:3px 9px;border-radius:99px;font-weight:700}
+.b-pend{background:#3a2d08;color:var(--gold)}
+.pl{padding:8px 0;border-top:1px dashed var(--line);font-size:14px}
+.pl b{font-size:15px}.c{background:var(--gold);color:#1a1300;border-radius:5px;padding:0 6px;font-size:11px;font-weight:800;margin-left:6px}
+.meta{color:var(--mute);font-size:13px}
+.fb{display:inline-flex;vertical-align:middle;margin-left:6px;color:#1877f2}
+.fb svg{width:20px;height:20px}
+.postlink{display:inline-flex;align-items:center;gap:6px;margin-top:8px;font-size:13px;color:var(--blue);text-decoration:none}
+fieldset{border:1px solid var(--line);border-radius:14px;padding:14px;margin:0 0 14px;background:var(--card)}
+legend{padding:0 8px;color:var(--gold);font-weight:800}
+label{display:block;font-size:13px;color:var(--mute);margin:10px 0 4px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:600px){.row{grid-template-columns:1fr}}
+button.go{width:100%;padding:15px;border:0;border-radius:12px;background:linear-gradient(90deg,#f5b83d,#ffcf6b);color:#1a1300;font-weight:800;font-size:17px;cursor:pointer}
+button.go:disabled{opacity:.6}
+.msg{padding:14px;border-radius:12px;margin:12px 0;font-size:15px}
+.ok{background:#0e2a20;border:1px solid var(--green)}.err{background:#2d1117;border:1px solid var(--red)}
+.empty{color:var(--mute);text-align:center;padding:30px}
+.hp{position:absolute;left:-9999px}
+.soon{margin-top:26px;text-align:center;color:var(--mute);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <img class="logo" src="logo.jpg" alt="Logo" onerror="this.style.display='none'">
+  <h1>Elite Playmakers FC</h1>
+  <div class="presents">PRESENTS</div>
+  <div class="title">CO-OP 2 VS 2 TOURNAMENT<small>eFootball Online Tournament</small></div>
+</header>
+
+<div class="search"><input id="q" type="search" placeholder="🔍 Search team or player name..."></div>
+
+<div class="tabs">
+  <button class="tab on" data-t="reg">Registration</button>
+  <button class="tab" data-t="pend">Pending <span class="n" id="cp">0</span></button>
+  <button class="tab" data-t="appr">Approved <span class="n" id="ca">0</span></button>
+</div>
+
+<!-- REGISTRATION -->
+<section class="panel on" id="reg">
+<form id="f" autocomplete="off" novalidate>
+  <fieldset><legend>Team</legend>
+    <label>Team Name</label><input name="team" maxlength="40" required>
+  </fieldset>
+
+  <fieldset><legend>Player 1 (Captain)</legend>
+    <div class="row">
+      <div><label>Name</label><input name="p1n" maxlength="40" required></div>
+      <div><label>Gmail / Email (Messenger group invite link will be sent here)</label><input name="p1e" type="email" required></div>
+      <div><label>Game UID</label><input name="p1u" required></div>
+      <div><label>Device</label><input name="p1d" placeholder="e.g. Samsung A54" required></div>
+      <div><label>WhatsApp Number</label><input name="p1w" inputmode="tel" required></div>
+      <div><label>Facebook ID Link</label><input name="p1f" type="url" placeholder="https://facebook.com/..." required></div>
+    </div>
+  </fieldset>
+
+  <fieldset><legend>Player 2 (Co-op Partner)</legend>
+    <div class="row">
+      <div><label>Name</label><input name="p2n" maxlength="40" required></div>
+      <div><label>Gmail / Email</label><input name="p2e" type="email" required></div>
+      <div><label>Game UID</label><input name="p2u" required></div>
+      <div><label>Device</label><input name="p2d" required></div>
+      <div><label>WhatsApp Number</label><input name="p2w" inputmode="tel" required></div>
+      <div><label>Facebook ID Link</label><input name="p2f" type="url" placeholder="https://facebook.com/..." required></div>
+    </div>
+  </fieldset>
+
+  <fieldset><legend>Facebook Registration Post</legend>
+    <label>FB Registration Post Link (post in our Facebook group first, then paste the link)</label>
+    <input name="post" type="url" placeholder="https://facebook.com/groups/..." required>
+  </fieldset>
+
+  <input class="hp" name="website" tabindex="-1" autocomplete="off">
+  <div id="out"></div>
+  <button class="go" id="btn" type="submit">Submit Registration</button>
+</form>
+</section>
+
+<!-- PENDING -->
+<section class="panel" id="pend"><div class="grid" id="lp"></div></section>
+<!-- APPROVED -->
+<section class="panel" id="appr"><div class="grid" id="la"></div></section>
+
+<div class="soon">Tournament Bracket &amp; Rules — coming in next step</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+const SUPABASE_URL = "https://lwdkcljeswzhvldkvpxh.supabase.co";
+const SUPABASE_KEY = "sb_publishable_UKUTLDe_CKnaFL8IlwlrYA_1s43LL53";
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const safeUrl = u => /^https?:\/\//i.test(u || "") ? esc(u) : "#";
+const FB = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M24 12a12 12 0 1 0-13.9 11.9v-8.4H7.1V12h3V9.4c0-3 1.8-4.7 4.5-4.7 1.3 0 2.7.2 2.7.2v3h-1.5c-1.5 0-2 .9-2 1.9V12h3.4l-.5 3.5h-2.9v8.4A12 12 0 0 0 24 12z"/></svg>';
+let pending = [], approved = [];
+
+// Tabs
+document.querySelectorAll(".tab").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.toggle("on", x === b));
+  document.querySelectorAll(".panel").forEach(p => p.classList.toggle("on", p.id === b.dataset.t));
+});
+
+function fbIcon(u){ return u ? `<a class="fb" href="${safeUrl(u)}" target="_blank" rel="noopener noreferrer" title="Facebook profile">${FB}</a>` : ""; }
+
+function render(){
+  const q = $("#q").value.trim().toLowerCase();
+  const m = (...a) => !q || a.some(x => (x || "").toLowerCase().includes(q));
+  const P = pending.filter(t => m(t.team_name, t.player1_name, t.player2_name));
+  const A = approved.filter(t => m(t.team_name, t.captain_name, t.partner_name));
+  $("#cp").textContent = pending.length; $("#ca").textContent = approved.length;
+
+  $("#lp").innerHTML = P.length ? P.map((t,i) => `
+    <div class="card"><h3>#${i+1} ${esc(t.team_name)}</h3>
+      <div class="pl"><b>${esc(t.player1_name)}</b><span class="c">C</span></div>
+      <div class="pl"><b>${esc(t.player2_name)}</b></div>
+      <div style="margin-top:8px"><span class="badge b-pend">PENDING</span></div></div>`).join("")
+    : '<div class="empty">No pending teams.</div>';
+
+  $("#la").innerHTML = A.length ? A.map(t => `
+    <div class="card"><h3>${esc(t.team_name)}
+      ${t.fb_post_link ? `<a class="fb" href="${safeUrl(t.fb_post_link)}" target="_blank" rel="noopener noreferrer" title="Registration post">${FB}</a>` : ""}</h3>
+      <div class="pl"><b>${esc(t.captain_name)}</b><span class="c">C</span>${fbIcon(t.captain_fb)}
+        <div class="meta">UID: ${esc(t.captain_uid)} · Device: ${esc(t.captain_device)}</div></div>
+      <div class="pl"><b>${esc(t.partner_name)}</b>${fbIcon(t.partner_fb)}
+        <div class="meta">UID: ${esc(t.partner_uid)} · Device: ${esc(t.partner_device)}</div></div></div>`).join("")
+    : '<div class="empty">No approved teams yet.</div>';
+}
+$("#q").addEventListener("input", render);
+
+async function load(){
+  const [p, a] = await Promise.all([db.from("public_pending").select("*"), db.from("public_approved").select("*")]);
+  pending = p.data || []; approved = a.data || []; render();
+}
+
+// Registration
+const ERR = {
+  DUPLICATE_UID: "⚠️ This Game UID is already registered. You cannot register again. Please contact EPF admin. (এই UID আগেই রেজিস্টার্ড, EPF-এর সাথে যোগাযোগ করুন।)",
+  SAME_UID_IN_TEAM: "⚠️ Both players cannot have the same UID.",
+  DUPLICATE_TEAM: "⚠️ This team name is already taken. Please choose another name.",
+  INVALID_UID: "⚠️ Invalid Game UID (minimum 6 letters/digits).",
+  INVALID_LINK: "⚠️ Please enter valid links starting with https://"
+};
+$("#f").addEventListener("submit", async e => {
+  e.preventDefault();
+  const f = e.target, v = n => f.elements[n].value.trim(), out = $("#out"), btn = $("#btn");
+  if (v("website")) return; // bot trap
+  for (const el of f.elements) if (el.required && !el.value.trim()) { out.innerHTML = '<div class="msg err">⚠️ Please fill in all fields.</div>'; el.focus(); return; }
+  btn.disabled = true; btn.textContent = "Submitting...";
+  const { data, error } = await db.rpc("register_team", {
+    p_team_name: v("team"), p_fb_post_link: v("post"),
+    p1_name: v("p1n"), p1_email: v("p1e"), p1_uid: v("p1u"), p1_device: v("p1d"), p1_whatsapp: v("p1w"), p1_fb: v("p1f"),
+    p2_name: v("p2n"), p2_email: v("p2e"), p2_uid: v("p2u"), p2_device: v("p2d"), p2_whatsapp: v("p2w"), p2_fb: v("p2f")
+  });
+  btn.disabled = false; btn.textContent = "Submit Registration";
+  if (error || !data) { out.innerHTML = '<div class="msg err">⚠️ Something went wrong. Please try again.</div>'; return; }
+  if (!data.ok) { out.innerHTML = `<div class="msg err">${esc(ERR[data.error] || "Registration failed.")}</div>`; return; }
+  f.reset();
+  out.innerHTML = '<div class="msg ok">✅ Registration submitted! Your team is <b>PENDING</b>. The EPF Admin Panel will verify and approve your registration. Check the Pending tab.</div>';
+  load();
+});
+
+load();
+</script>
+</body>
+</html>
