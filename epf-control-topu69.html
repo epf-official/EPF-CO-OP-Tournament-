@@ -63,11 +63,13 @@ button:disabled{opacity:.5}
     <button data-t="scores">Scores</button>
     <button data-t="fix">Fixture &amp; Deadlines</button>
     <button data-t="rules">Rules</button>
+    <button data-t="group">Match Day Group</button>
   </div>
   <section id="t-teams"></section>
   <section id="t-scores" class="hide"></section>
   <section id="t-fix" class="hide"></section>
   <section id="t-rules" class="hide"></section>
+  <section id="t-group" class="hide"></section>
 </div>
 
 <div class="modal" id="modal"><div class="box" id="mbox"></div></div>
@@ -115,11 +117,11 @@ $("#out").onclick = async () => { await db.auth.signOut(); show(false); };
 $("#tabs").addEventListener("click", e => {
   const b = e.target.closest("button[data-t]"); if (!b) return;
   document.querySelectorAll("#tabs button").forEach(x => x.classList.toggle("on", x === b));
-  ["teams","scores","fix","rules"].forEach(t => $("#t-" + t).classList.toggle("hide", t !== b.dataset.t));
+  ["teams","scores","fix","rules","group"].forEach(t => $("#t-" + t).classList.toggle("hide", t !== b.dataset.t));
 });
 
 let teams = [], filter = "pending", search = "";
-async function loadAll(){ await Promise.all([loadTeams(), loadScores(), loadFix(), loadRules()]); }
+async function loadAll(){ await Promise.all([loadTeams(), loadScores(), loadFix(), loadRules(), loadGroup()]); }
 
 // ---------- TEAMS ----------
 async function loadTeams(){
@@ -218,6 +220,9 @@ async function loadFix(){
     <h2>Round Deadlines (Bangladesh time)</h2>
     ${R.length ? R.map(r => `<div class="card"><b>${esc(r.name)}</b> <span class="m">${r.deadline ? "· " + esc(BD(r.deadline)) : ""}</span>
       <div class="acts"><input type="datetime-local" id="dl-${r.round_no}" value="${toInput(r.deadline)}" style="max-width:240px"><button class="p" data-dl="${r.round_no}">Save</button><button data-cl="${r.round_no}">Clear</button></div></div>`).join("") : '<div class="m">No bracket yet.</div>'}
+    <h2>Download Round Images (for Facebook)</h2>
+    <div class="card"><div class="m">Each image has the club logo, tournament name, round, matches, scores and players.</div>
+    <div class="acts">${R.map(r => `<button data-img="${r.round_no}">⬇ ${esc(r.name)}</button>`).join("")}${R.length ? '<button class="p" data-imgall="1">⬇ All rounds</button>' : ""}</div></div>
     <h2>Match Results (edit / enter)</h2>
     ${R.map(r => `<div class="card"><b>${esc(r.name)}</b>` + M.filter(m => m.round_no === r.round_no).map(m => m.team1_id && m.team2_id ? `
       <div class="scrow"><div class="nm">${esc(m.team1_name)} vs ${esc(m.team2_name)} <span class="m">${m.status === "done" ? "✔ done" : ""}</span></div>
@@ -225,6 +230,9 @@ async function loadFix(){
       <button class="g" data-sr="${m.id}">Set</button></div>` : `<div class="scrow"><div class="nm m">Match ${m.match_no}: waiting for teams</div></div>`).join("") + "</div>").join("")}`;
 }
 $("#t-fix").addEventListener("click", async e => {
+  const im = e.target.closest("[data-img]"), ia = e.target.closest("[data-imgall]");
+  if (im) return downloadRound(parseInt(im.dataset.img, 10));
+  if (ia) return downloadAll();
   if (e.target.id === "gen") {
     const size = parseInt($("#gsize").value, 10);
     if (!confirm(`Generate a ${size}-team bracket? This resets everything in the bracket.`)) return;
@@ -273,6 +281,109 @@ $("#t-rules").addEventListener("click", async e => {
   if (ed) ruleForm(rules.find(x => x.id === ed.dataset.re));
   if (d) { if (!confirm("Delete this rule?")) return; const { error } = await db.from("rules").delete().eq("id", d.dataset.rd); if (error) return toast(errText(error), false); loadRules(); }
 });
+
+// ---------- MATCH DAY GROUP LINK ----------
+async function loadGroup(){
+  const { data } = await db.from("site_settings").select("value").eq("key", "matchday_link").maybeSingle();
+  const v = (data && data.value) || "";
+  $("#t-group").innerHTML = `<h2 style="margin-top:0">Match Day Group Link</h2><div class="card">
+    <div class="m">Messenger group invite link. Players see it on the home page under "Join Match Day Group". Keep it empty until the tournament starts (the site shows "Tournament not started yet").</div>
+    <label>Messenger group link (https://...)</label><input id="gl" value="${esc(v)}" placeholder="https://m.me/j/...">
+    <div class="acts"><button class="p" id="gsave">Save</button><button class="r" id="gclear">Remove link</button></div>
+    <div class="m" style="margin-top:10px">Website status: <b>${v ? "Link is LIVE" : "Showing 'not started yet' message"}</b></div></div>`;
+}
+$("#t-group").addEventListener("click", async e => {
+  if (e.target.id === "gsave") {
+    const v = $("#gl").value.trim();
+    if (v && !/^https?:\/\//i.test(v)) return toast("Link must start with https://", false);
+    const { error } = await db.from("site_settings").upsert({ key: "matchday_link", value: v, updated_at: new Date().toISOString() });
+    if (error) return toast(errText(error), false);
+    toast(v ? "Link saved" : "Link removed"); loadGroup();
+  }
+  if (e.target.id === "gclear") {
+    const { error } = await db.from("site_settings").upsert({ key: "matchday_link", value: "", updated_at: new Date().toISOString() });
+    if (error) return toast(errText(error), false);
+    toast("Link removed"); loadGroup();
+  }
+});
+
+// ---------- ROUND IMAGE DOWNLOAD ----------
+const logoImg = new Image();
+const logoReady = new Promise(res => { logoImg.onload = () => res(true); logoImg.onerror = () => res(false); });
+logoImg.src = "logo.jpg";
+const FONT = '"Noto Sans Bengali","Segoe UI",Arial,sans-serif';
+function fitT(c, text, maxW, size, weight){
+  let s = size;
+  for (; s > 12; s -= 2) { c.font = `${weight} ${s}px ${FONT}`; if (c.measureText(text).width <= maxW) break; }
+  c.font = `${weight} ${s}px ${FONT}`; return s;
+}
+function rrect(c, x, y, w, h, r){ c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+async function drawRound(r, ms, isFinal){
+  const ok = await logoReady, W = 1080, cols = ms.length > 8 ? 2 : 1, cw = cols === 2 ? 480 : 920, ch = 170, gx = cols === 2 ? 40 : 0, rows = Math.ceil(ms.length / cols);
+  const fin = isFinal && ms[0] && ms[0].winner_id ? ms[0] : null;
+  const champ = fin ? (fin.winner_id === fin.team1_id ? fin.team1_name : fin.team2_name) : null;
+  const H = 490 + (champ ? 130 : 0) + rows * (ch + 18) + 130;
+  const cv = document.createElement("canvas"); cv.width = W; cv.height = H; const c = cv.getContext("2d");
+  let g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#0c1630"); g.addColorStop(1, "#04070e"); c.fillStyle = g; c.fillRect(0, 0, W, H);
+  let rg = c.createRadialGradient(W / 2, 0, 10, W / 2, 0, 700); rg.addColorStop(0, "rgba(245,184,61,.30)"); rg.addColorStop(1, "rgba(245,184,61,0)"); c.fillStyle = rg; c.fillRect(0, 0, W, 900);
+  c.fillStyle = "rgba(245,184,61,.04)";
+  for (let x = -300; x < W; x += 260) { c.beginPath(); c.moveTo(x, H); c.lineTo(x + 90, H); c.lineTo(x + 90 + H * .4, 0); c.lineTo(x + H * .4, 0); c.fill(); }
+  if (ok) { c.save(); c.globalCompositeOperation = "lighten"; const lh = 180, lw = lh * logoImg.width / logoImg.height; c.drawImage(logoImg, (W - lw) / 2, 24, lw, lh); c.restore(); }
+  c.textAlign = "center"; c.textBaseline = "middle";
+  c.fillStyle = "#f5b83d"; c.font = 'bold 54px Georgia,"Times New Roman",serif'; c.fillText("ELITE PLAYMAKERS FC", W / 2, 250);
+  c.fillStyle = "#e8edf7"; fitT(c, "EPF CO-OP 2 VS 2 TOURNAMENT", 900, 40, "bold"); c.fillText("EPF CO-OP 2 VS 2 TOURNAMENT", W / 2, 310);
+  const nm = r.name.toUpperCase(); fitT(c, nm, 640, 58, "bold"); const tw = Math.min(c.measureText(nm).width + 90, 820);
+  c.fillStyle = "#f5b83d"; rrect(c, (W - tw) / 2, 350, tw, 90, 45); c.fill(); c.fillStyle = "#1a1300"; c.fillText(nm, W / 2, 396);
+  if (r.deadline) { c.fillStyle = "#8d9bb8"; c.font = "24px " + FONT; c.fillText("Deadline: " + BD(r.deadline), W / 2, 468); }
+  let y = 495;
+  if (champ) {
+    c.fillStyle = "rgba(245,184,61,.18)"; rrect(c, 80, y, 920, 100, 28); c.fill(); c.strokeStyle = "#f5b83d"; c.lineWidth = 3; c.stroke();
+    c.fillStyle = "#f5b83d"; const t = "★ CHAMPION: " + champ; fitT(c, t, 860, 46, "bold"); c.fillText(t, W / 2, y + 50); y += 130;
+  }
+  const x0 = (W - (cols * cw + (cols - 1) * gx)) / 2; let played = 0;
+  ms.forEach((m, i) => {
+    if (m.status === "done") played++;
+    const x = x0 + (i % cols) * (cw + gx), yy = y + Math.floor(i / cols) * (ch + 18);
+    c.fillStyle = "rgba(255,255,255,.07)"; rrect(c, x, yy, cw, ch, 20); c.fill(); c.strokeStyle = "rgba(245,184,61,.45)"; c.lineWidth = 2; c.stroke();
+    c.textAlign = "left"; c.fillStyle = "#8d9bb8"; c.font = "bold 17px Arial"; c.fillText("MATCH " + m.match_no, x + 20, yy + 22);
+    [1, 2].forEach(n => {
+      const base = yy + (n === 1 ? 42 : 112), id = m["team" + n + "_id"], name = m["team" + n + "_name"] || "TBD", sc = m["score" + n];
+      const win = m.winner_id && m.winner_id === id, lose = m.winner_id && !win;
+      c.globalAlpha = lose ? .5 : 1; c.textAlign = "left";
+      c.fillStyle = win ? "#2fd48a" : "#e8edf7"; fitT(c, name, cw - 130, 28, "bold"); c.fillText(name, x + 20, base + 16);
+      if (id) { c.fillStyle = "#8d9bb8"; const pl = (m["t" + n + "_captain"] || "") + " (C) & " + (m["t" + n + "_partner"] || ""); fitT(c, pl, cw - 130, 18, "normal"); c.fillText(pl, x + 20, base + 40); }
+      c.fillStyle = "#0a1226"; rrect(c, x + cw - 80, base + 2, 60, 52, 12); c.fill();
+      c.fillStyle = win ? "#2fd48a" : "#e8edf7"; c.textAlign = "center"; c.font = "bold 30px Arial"; c.fillText(sc == null ? "-" : String(sc), x + cw - 50, base + 28);
+      c.globalAlpha = 1;
+    });
+    c.fillStyle = "rgba(255,255,255,.12)"; c.fillRect(x + 20, yy + 99, cw - 40, 2);
+    c.fillStyle = "#0e182e"; rrect(c, x + 20, yy + 92, 40, 16, 8); c.fill();
+    c.fillStyle = "#f5b83d"; c.textAlign = "center"; c.font = "bold 12px Arial"; c.fillText("VS", x + 40, yy + 100);
+  });
+  c.textAlign = "center"; c.fillStyle = "#f5b83d"; c.fillRect(80, H - 105, W - 160, 2);
+  c.fillStyle = "#8d9bb8"; c.font = "22px " + FONT; c.fillText("#EPF  #ElitePlaymakersFC   |   " + played + "/" + ms.length + " matches played", W / 2, H - 62);
+  return cv;
+}
+async function getRoundData(){
+  const [rd, mt] = await Promise.all([db.from("rounds").select("*").order("round_no"), db.from("public_matches").select("*")]);
+  return { R: rd.data || [], M: mt.data || [] };
+}
+async function downloadRound(no, quiet){
+  const { R, M } = await getRoundData(); const r = R.find(x => x.round_no === no);
+  if (!r) return toast("Round not found", false);
+  const ms = M.filter(m => m.round_no === no).sort((a, b) => a.match_no - b.match_no);
+  const cv = await drawRound(r, ms, no === Math.max(...R.map(x => x.round_no)));
+  await new Promise(res => cv.toBlob(b => {
+    const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = "EPF_CoOp_" + r.name.replace(/\s+/g, "_") + ".png";
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 3000); res();
+  }, "image/png"));
+  if (!quiet) toast("Image downloaded");
+}
+async function downloadAll(){
+  const { R } = await getRoundData();
+  for (const r of R) { await downloadRound(r.round_no, true); await new Promise(x => setTimeout(x, 700)); }
+  toast("All round images downloaded");
+}
 
 checkAdmin();
 </script>
