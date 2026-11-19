@@ -129,6 +129,14 @@ async function loadTeams(){
   if (error) return toast(errText(error), false);
   teams = data || []; renderTeams();
 }
+function emailList(st){
+  const seen = new Set(), out = [];
+  teams.filter(t => st === "all" || t.status === st).forEach(t => t.players.forEach(p => { const e = (p.email || "").trim(); if (e && !seen.has(e.toLowerCase())) { seen.add(e.toLowerCase()); out.push(e); } }));
+  return out;
+}
+async function copyText(txt){
+  try { await navigator.clipboard.writeText(txt); } catch (e) { const ta = document.createElement("textarea"); ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); }
+}
 function renderTeams(){
   const cnt = s => teams.filter(t => t.status === s).length;
   const q = search.toLowerCase();
@@ -137,6 +145,9 @@ function renderTeams(){
   $("#t-teams").innerHTML = `
     <div class="chips">${["pending","approved","declined","all"].map(f => `<button data-f="${f}" class="${filter === f ? "on" : ""}">${f[0].toUpperCase() + f.slice(1)}${f !== "all" ? " (" + cnt(f) + ")" : " (" + teams.length + ")"}</button>`).join("")}</div>
     <input id="tq" placeholder="Search team / player / UID" value="${esc(search)}" style="margin-bottom:12px">
+    <div class="card"><b>📧 Copy emails</b> <span class="m">(for sending the Match Day Group link)</span>
+      <div class="acts"><button class="g" data-em="approved">Copy APPROVED emails (${emailList("approved").length})</button><button data-em="pending">Copy PENDING emails (${emailList("pending").length})</button><button data-em="all">Copy ALL emails (${emailList("all").length})</button></div>
+      <div class="m" style="margin-top:6px">Emails are separated by comma. Paste them in the BCC field of Gmail.</div></div>
     ${list.length ? list.map(t => {
       const c = t.players.find(p => p.role === "captain") || {}, o = t.players.find(p => p.role === "partner") || {};
       const pl = (p, lab) => `<div class="pl"><b>${esc(p.name)}</b> <span class="m">(${lab})</span> ${fbi(p.fb_link, "Player Facebook")}
@@ -153,6 +164,8 @@ function renderTeams(){
 }
 $("#t-teams").addEventListener("input", e => { if (e.target.id === "tq") { search = e.target.value; const p = e.target.selectionStart; renderTeams(); const n = $("#tq"); n.focus(); n.setSelectionRange(p, p); } });
 $("#t-teams").addEventListener("click", async e => {
+  const em = e.target.closest("[data-em]");
+  if (em) { const L = emailList(em.dataset.em); if (!L.length) return toast("No emails found", false); await copyText(L.join(", ")); return toast(L.length + " emails copied"); }
   const f = e.target.closest("[data-f]"); if (f) { filter = f.dataset.f; return renderTeams(); }
   const a = e.target.closest("[data-a]");
   if (a) { const { error } = await db.from("teams").update({ status: a.dataset.a }).eq("id", a.dataset.id); if (error) return toast(errText(error), false); toast("Updated"); return loadTeams(); }
@@ -214,9 +227,11 @@ async function loadFix(){
   const R = rd.data || [], M = mt.data || [], n = ap.count || 0;
   $("#t-fix").innerHTML = `<h2 style="margin-top:0">Generate Fixture</h2>
     <div class="card"><div class="m">Approved teams: <b style="color:var(--gold)">${n}</b></div>
-    <label>Bracket size</label><select id="gsize">${[2,4,8,16,32,64].map(v => `<option ${v === 32 ? "selected" : ""}>${v}</option>`).join("")}</select>
-    <div class="m" style="margin-top:8px">Picks random approved teams. ⚠ This deletes the old bracket, results and score submissions.</div>
-    <div class="acts"><button class="p" id="gen">Generate Bracket</button></div></div>
+    <label>Bracket size</label><select id="gsize">${[2,4,8,16,32,64].map(v => `<option ${v === 64 ? "selected" : ""}>${v}</option>`).join("")}</select>
+    <div class="row"><div><label>Live draw time (minutes, 0 = instant bracket)</label><input id="gmin" type="number" min="0" max="60" value="20"></div>
+      <div><label>Team showcase before draw (seconds)</label><input id="gintro" type="number" min="0" max="180" value="60"></div></div>
+    <div class="m" style="margin-top:8px">Picks random approved teams. With live draw, the public Bracket page starts a countdown (30 sec) then shows all teams, then draws match by match. ⚠ This deletes the old bracket, results and score submissions.</div>
+    <div class="acts"><button class="p" id="gen">Generate Bracket</button><button id="drs">↻ Restart live draw</button><button id="drk">⏭ Skip draw (show all now)</button></div></div>
     <h2>Round Deadlines (Bangladesh time)</h2>
     ${R.length ? R.map(r => `<div class="card"><b>${esc(r.name)}</b> <span class="m">${r.deadline ? "· " + esc(BD(r.deadline)) : ""}</span>
       <div class="acts"><input type="datetime-local" id="dl-${r.round_no}" value="${toInput(r.deadline)}" style="max-width:240px"><button class="p" data-dl="${r.round_no}">Save</button><button data-cl="${r.round_no}">Clear</button></div></div>`).join("") : '<div class="m">No bracket yet.</div>'}
@@ -233,10 +248,17 @@ $("#t-fix").addEventListener("click", async e => {
   const im = e.target.closest("[data-img]"), ia = e.target.closest("[data-imgall]");
   if (im) return downloadRound(parseInt(im.dataset.img, 10));
   if (ia) return downloadAll();
+  if (e.target.id === "drs" || e.target.id === "drk") {
+    const skip = e.target.id === "drk";
+    const { error } = await db.rpc("set_draw", { p_action: skip ? "skip" : "restart", p_minutes: Math.max(1, parseInt($("#gmin").value, 10) || 20), p_intro: Math.max(0, parseInt($("#gintro").value, 10) || 0) });
+    if (error) return toast(errText(error), false);
+    return toast(skip ? "Draw skipped. Full bracket is visible." : "Live draw restarts in 30 seconds");
+  }
   if (e.target.id === "gen") {
     const size = parseInt($("#gsize").value, 10);
     if (!confirm(`Generate a ${size}-team bracket? This resets everything in the bracket.`)) return;
-    const { error } = await db.rpc("generate_bracket", { p_size: size });
+    const mins = Math.max(0, parseInt($("#gmin").value, 10) || 0), intro = Math.max(0, parseInt($("#gintro").value, 10) || 0);
+    const { error } = await db.rpc("generate_bracket", { p_size: size, p_minutes: mins, p_intro: intro });
     if (error) return toast(error.message.includes("NOT_ENOUGH") ? "Not enough approved teams." : errText(error), false);
     toast("Bracket generated"); return loadFix();
   }
