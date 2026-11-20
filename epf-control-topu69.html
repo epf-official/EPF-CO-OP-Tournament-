@@ -238,6 +238,8 @@ async function loadFix(){
     <h2>Download Round Images (for Facebook)</h2>
     <div class="card"><div class="m">Each image has the club logo, tournament name, round, matches, scores and players.</div>
     <div class="acts">${R.map(r => `<button data-img="${r.round_no}">⬇ ${esc(r.name)}</button>`).join("")}${R.length ? '<button class="p" data-imgall="1">⬇ All rounds</button>' : ""}</div></div>
+    <h2>Copy Fixture Text (for Messenger / Facebook)</h2>
+    ${fxHtml(R)}
     <h2>Match Results (edit / enter)</h2>
     ${R.map(r => `<div class="card"><b>${esc(r.name)}</b>` + M.filter(m => m.round_no === r.round_no).map(m => m.team1_id && m.team2_id ? `
       <div class="scrow"><div class="nm">${esc(m.team1_name)} vs ${esc(m.team2_name)} <span class="m">${m.status === "done" ? "✔ done" : ""}</span></div>
@@ -245,6 +247,9 @@ async function loadFix(){
       <button class="g" data-sr="${m.id}">Set</button></div>` : `<div class="scrow"><div class="nm m">Match ${m.match_no}: waiting for teams</div></div>`).join("") + "</div>").join("")}`;
 }
 $("#t-fix").addEventListener("click", async e => {
+  const fx = e.target.closest("[data-fx]"), fxa = e.target.closest("[data-fxall]");
+  if (fx) return copyFixture(parseInt(fx.dataset.fx, 10));
+  if (fxa) return copyFixture(0);
   const im = e.target.closest("[data-img]"), ia = e.target.closest("[data-imgall]");
   if (im) return downloadRound(parseInt(im.dataset.img, 10));
   if (ia) return downloadAll();
@@ -303,6 +308,52 @@ $("#t-rules").addEventListener("click", async e => {
   if (ed) ruleForm(rules.find(x => x.id === ed.dataset.re));
   if (d) { if (!confirm("Delete this rule?")) return; const { error } = await db.from("rules").delete().eq("id", d.dataset.rd); if (error) return toast(errText(error), false); loadRules(); }
 });
+
+// ---------- COPY FIXTURE TEXT ----------
+const FXK = "epf_fx_cfg";
+function fxBase(){ return location.href.split("#")[0].split("?")[0].replace(/[^/]*$/, ""); }
+function fxGet(){
+  let c = {}; try { c = JSON.parse(localStorage.getItem(FXK) || "{}"); } catch (e) {}
+  const today = new Date().toLocaleDateString("en-GB", { timeZone: "Asia/Dhaka", day: "numeric", month: "long", year: "numeric" });
+  return { date: c.date || today, dl: c.dl || "রাত ১:১০", rt: c.rt || "রাত ১২:৫০ - ১:১০", site: c.site || fxBase(), rules: c.rules || (fxBase() + "#rules"), pl: c.pl === undefined ? true : c.pl };
+}
+function fxSave(){
+  const c = { date: $("#fx-date").value, dl: $("#fx-dl").value, rt: $("#fx-rt").value, site: $("#fx-site").value, rules: $("#fx-rules").value, pl: $("#fx-pl").checked };
+  try { localStorage.setItem(FXK, JSON.stringify(c)); } catch (e) {}
+}
+function fxHtml(R){
+  const c = fxGet();
+  return `<div class="card"><div class="m">Make a ready-to-paste text of the fixture. It is saved to your clipboard and shown below.</div>
+    <div class="row"><div><label>Date</label><input id="fx-date" value="${esc(c.date)}"></div><div><label>Deadline</label><input id="fx-dl" value="${esc(c.dl)}"></div>
+    <div><label>Response / Priority time</label><input id="fx-rt" value="${esc(c.rt)}"></div><div><label>Website (result submit) link</label><input id="fx-site" value="${esc(c.site)}"></div>
+    <div><label>Rules link</label><input id="fx-rules" value="${esc(c.rules)}"></div><div><label>&nbsp;</label><label style="font-size:14px;color:var(--text)"><input id="fx-pl" type="checkbox" style="width:auto" ${c.pl ? "checked" : ""}> Show player names</label></div></div>
+    <div class="acts">${R.map(r => `<button data-fx="${r.round_no}">📋 ${esc(r.name)}</button>`).join("")}${R.length ? '<button class="p" data-fxall="1">📋 All rounds</button>' : ""}</div>
+    <label>Preview (you can edit before copying again)</label><textarea id="fx-out" style="min-height:220px" placeholder="Press a round button above"></textarea>
+    <div class="acts"><button class="g" id="fx-copy">Copy this text</button></div></div>`;
+}
+function fxBlock(r, ms, c){
+  const pl = (cap, par) => c.pl && cap ? ` (${cap} & ${par})` : "";
+  const rows = ms.filter(m => m.team1_id && m.team2_id).map(m => {
+    const res = m.status === "done" ? `  ✔ ${m.score1}-${m.score2}` : "";
+    return `Match ${m.match_no}: ${m.team1_name}${pl(m.t1_captain, m.t1_partner)} 🆚 ${m.team2_name}${pl(m.t2_captain, m.t2_partner)}${res}`;
+  });
+  if (!rows.length) return "";
+  return ["━━━━━━━━━━━━━━", "📌 " + r.name.toUpperCase() + " (" + rows.length + " matches)", "⏰ Deadline: " + c.dl, "⚡ Response / Priority Time: " + c.rt, "━━━━━━━━━━━━━━", ""].concat(rows).join("\n");
+}
+function fxText(blocks, c){
+  const head = ["🏆 ELITE PLAYMAKERS FC", "EPF CO-OP 2 VS 2 TOURNAMENT", "", "📅 Date: " + c.date + " (Today)", "🔰 BRACKET: TODAY", ""].join("\n");
+  const foot = ["", "━━━━━━━━━━━━━━", "📝 Result Submit: " + c.site, "📜 Rules: " + c.rules, "", "#EPF #ElitePlaymakersFC #EPFCoop2v2Tournament"].join("\n");
+  return head + "\n" + blocks.join("\n\n") + "\n" + foot;
+}
+async function copyFixture(no){
+  fxSave(); const c = fxGet(), { R, M } = await getRoundData();
+  const rs = no ? R.filter(r => r.round_no === no) : R;
+  const blocks = rs.map(r => fxBlock(r, M.filter(m => m.round_no === r.round_no).sort((a, b) => a.match_no - b.match_no), c)).filter(Boolean);
+  if (!blocks.length) return toast("No matches with both teams yet", false);
+  const t = fxText(blocks, c); $("#fx-out").value = t; await copyText(t); toast("Fixture text copied");
+}
+$("#t-fix").addEventListener("input", e => { if (e.target.id && e.target.id.startsWith("fx-") && e.target.id !== "fx-out") fxSave(); });
+$("#t-fix").addEventListener("click", async e => { if (e.target.id === "fx-copy") { const t = $("#fx-out").value; if (!t) return toast("Nothing to copy", false); await copyText(t); toast("Copied"); } });
 
 // ---------- MATCH DAY GROUP LINK ----------
 async function loadGroup(){
